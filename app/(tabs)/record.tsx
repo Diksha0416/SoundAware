@@ -165,7 +165,7 @@ export default function RecordScreen() {
     try {
       // If running in the browser, upload the file to the backend /predict endpoint
       // so the backend TFLite model (contexts/model_int8.tflite) does the inference.
-      const BACKEND_BASE = (global as any).BACKEND_URL || 'http://127.0.0.1:5000';
+      const BACKEND_BASE = (global as any).BACKEND_URL || 'http://192.168.29.32:5000';
       const PRED_URL = `${BACKEND_BASE}/predict`;
 
       // Try to upload to backend for inference on all platforms (web & native).

@@ -13,11 +13,6 @@ SoundAware is a mobile app built with Expo (React Native) using Expo Router. Thi
 - Navigation via `expo-router` and `@react-navigation/*`
 
 
-## Tech Stack
-- React Native 0.81 + Expo SDK 54
-- Expo Router ~6
-- TypeScript ~5.9
-
 Important config files:
 - `package.json` – scripts and dependencies
 - `app.json` – Expo config (name, icon, plugins, web bundler, etc.)
@@ -55,9 +50,17 @@ This runs `expo start` and shows a QR code and connection options (LAN/Tunnel/Lo
 ## Run on a Mobile Device (Same Wi‑Fi/LAN Required)
 Your mobile device and laptop must be on the same Wi‑Fi network. This ensures the Expo dev server’s LAN IP is reachable from your phone.
 
+record.tsx
+const BACKEND_BASE = (global as any).BACKEND_URL || 'http://xxx.xxx.xx.xx:5000';
+Replace xxx.xxx.xx.xx with your IP Address of the Devices.
+
+index.js
+global.BACKEND_URL = 'http://xx.xx.xx.xx:5000';
+Replace xxx.xxx.xx.xx with your IP Address of the Devices.
+
 Steps:
 1. Connect both devices to the same Wi‑Fi (same router SSID). Guest networks/hotspots may restrict LAN access.
-2. After `npm run dev`, the Expo Dev Tools open. Keep the connection type as "LAN" (default). If LAN is blocked, allow through Firewall or temporarily switch to "Tunnel" (slower, uses internet).
+2. After `npx expo start -c`, the Expo Dev Tools open. Keep the connection type as "LAN" (default). If LAN is blocked, allow through Firewall or temporarily switch to "Tunnel" (slower, uses internet).
 3. Open Expo Go on your phone:
    - Android: Scan the QR code from the Dev Tools.
    - iOS: Use the Camera app to scan the QR and open in Expo Go.
@@ -80,12 +83,6 @@ You can also test on the web:
   npm run build:web
   ```
   The output will be in `dist/` (Expo export default output).
-
-
-## Project Scripts (`package.json`)
-- `npm run dev` – Start the Expo dev server
-- `npm run build:web` – Export for web
-- `npm run lint` – Run linting
 
 
 ## Directory Structure (High-level)
