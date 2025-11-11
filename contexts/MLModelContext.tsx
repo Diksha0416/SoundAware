@@ -40,13 +40,13 @@ interface MLModelContextType {
 
 const defaultSettings: MLModelSettings = {
   modelVersion: 'v2.1.0',
-  sensitivity: 0.7,
+  sensitivity: 0.75,
   confidenceThreshold: 0.6,
   enablePreprocessing: true,
   enablePostprocessing: true,
   batchSize: 32,
-  maxDuration: 30,
-  sampleRate: 44100,
+  maxDuration: 3,
+  sampleRate: 16000,
 };
 
 const defaultPerformance: ModelPerformance = {
@@ -113,59 +113,60 @@ export function MLModelProvider({ children }: { children: React.ReactNode }) {
   };
 
   const processAudio = async (audioUri: string, sensitivity?: number): Promise<PredictionResult> => {
-    const startTime = Date.now();
-    
-    // Simulate ML processing with realistic delay
-    await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
-    
-    const effectiveSensitivity = sensitivity || modelSettings.sensitivity;
-    
-    // Enhanced mock predictions with more variety
-    const soundCategories = {
-      kitchen: ['Microwave Beep', 'Kitchen Timer', 'Boiling Water', 'Blender', 'Coffee Maker', 'Dishwasher'],
-      security: ['Doorbell', 'Door Knock', 'Window Break', 'Car Alarm', 'Motion Sensor'],
-      appliances: ['Washing Machine', 'Vacuum Cleaner', 'Air Conditioner', 'Dryer Cycle', 'Garbage Disposal'],
-      pets: ['Dog Bark', 'Cat Meow', 'Bird Chirping', 'Hamster Wheel'],
-      emergency: ['Smoke Alarm', 'Carbon Monoxide Alarm', 'Fire Alarm', 'Security Siren'],
-      communication: ['Phone Ring', 'Text Message', 'Video Call', 'Notification Sound'],
-      ambient: ['Running Water', 'Footsteps', 'Door Closing', 'Chair Moving', 'Paper Rustling']
-    };
-    
-    const allSounds = Object.values(soundCategories).flat();
-    const primarySound = allSounds[Math.floor(Math.random() * allSounds.length)];
-    
-    // Adjust confidence based on sensitivity
-    let baseConfidence = 0.6 + Math.random() * 0.35;
-    if (effectiveSensitivity > 0.8) baseConfidence += 0.1;
-    if (effectiveSensitivity < 0.5) baseConfidence -= 0.1;
-    
-    const confidence = Math.min(0.99, Math.max(0.3, baseConfidence));
-    
-    // Generate alternative predictions
-    const alternatives = allSounds
-      .filter(sound => sound !== primarySound)
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 2)
-      .map(sound => ({
-        soundType: sound,
-        confidence: Math.random() * (confidence - 0.1)
-      }));
-    
-    const inferenceTime = Date.now() - startTime;
-    
-    // Update performance metrics
-    setModelPerformance(prev => ({
-      ...prev,
-      inferenceTime,
-      lastUpdated: new Date(),
-    }));
-    
-    return {
-      soundType: primarySound,
-      confidence,
-      duration: 2 + Math.random() * 8,
-      alternatives,
-    };
+    // Send audio file to backend predict endpoint and return the model's prediction.
+    const BACKEND_BASE = (global as any).BACKEND_URL || 'http://192.168.29.32:5000';
+    const PRED_URL = `${BACKEND_BASE}/predict`;
+
+    try {
+      const form = new FormData();
+      // derive filename and mime
+      const filename = audioUri.split('/').pop() || `recording_${Date.now()}.wav`;
+      const ext = filename.includes('.') ? filename.split('.').pop() : 'wav';
+      let mime = 'audio/wav';
+      if (ext === 'm4a' || ext === 'aac') mime = 'audio/mp4';
+      else if (ext === 'mp3') mime = 'audio/mpeg';
+      else if (ext === 'flac') mime = 'audio/flac';
+
+      // For web, fetch the blob; for native, provide { uri, name, type }
+      if (typeof window !== 'undefined' && (window as any).location) {
+        const resp = await fetch(audioUri);
+        const blob = await resp.blob();
+        form.append('file', blob as any, filename);
+      } else {
+        form.append('file', { uri: audioUri, name: filename, type: mime } as any);
+      }
+
+      // Attempt POST to backend
+      const res = await fetch(PRED_URL, { method: 'POST', body: form });
+      if (!res.ok) {
+        throw new Error(`Server error ${res.status}`);
+      }
+
+      const json = await res.json();
+      const pred_label: string = json.pred_label || (json.pred_label && String(json.pred_label)) || 'unknown';
+      const pred_idx: number = typeof json.pred_idx === 'number' ? json.pred_idx : -1;
+      const scores: number[] = Array.isArray(json.scores) ? json.scores : [];
+
+      const confidence = pred_idx >= 0 && scores[pred_idx] != null ? scores[pred_idx] : (json.top_k && json.top_k[0] && json.top_k[0].score) || 0;
+
+      // Update performance timing (approx)
+      setModelPerformance(prev => ({ ...prev, inferenceTime: json.inference_time_ms || prev.inferenceTime, lastUpdated: new Date() }));
+
+      return {
+        soundType: pred_label,
+        confidence: typeof confidence === 'number' ? confidence : 0,
+        duration: json.duration || 0,
+        alternatives: (json.top_k || []).slice(1, 3).map((it: any) => ({ soundType: it.label, confidence: it.score }))
+      };
+    } catch (error) {
+      console.warn('processAudio: backend request failed', error);
+      // If backend fails, return unknown with zero confidence (do NOT return static mock classes)
+      return {
+        soundType: 'unknown',
+        confidence: 0,
+        duration: 0,
+      };
+    }
   };
 
   const resetModel = async () => {

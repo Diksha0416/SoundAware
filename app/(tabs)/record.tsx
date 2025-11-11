@@ -10,6 +10,68 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { AudioVisualizer } from '@/components/ui/AudioVisualizer';
 import { Audio } from 'expo-av';
+// Helper: convert arbitrary audio blob/uri to 16kHz mono WAV (browser only)
+async function convertToWavBlobWeb(uri: string, targetRate = 16000): Promise<Blob> {
+  // fetch source
+  const resp = await fetch(uri);
+  const arrayBuffer = await resp.arrayBuffer();
+
+  const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+  if (!AudioCtx) throw new Error('Web Audio API not available');
+  const audioCtx = new AudioCtx();
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+  // Use OfflineAudioContext to resample to targetRate and mix to mono
+  const offlineCtx = new (window as any).OfflineAudioContext(1, Math.ceil(audioBuffer.duration * targetRate), targetRate);
+  const bufferSource = offlineCtx.createBufferSource();
+  // create a mono buffer by copying channels into a single channel
+  const tmpBuf = offlineCtx.createBuffer(audioBuffer.numberOfChannels, audioBuffer.length, audioBuffer.sampleRate);
+  for (let ch = 0; ch < audioBuffer.numberOfChannels; ch++) {
+    tmpBuf.copyToChannel(audioBuffer.getChannelData(ch), ch);
+  }
+  bufferSource.buffer = audioBuffer;
+  bufferSource.connect(offlineCtx.destination);
+  bufferSource.start(0);
+  const rendered = await offlineCtx.startRendering();
+  const channelData = rendered.getChannelData(0);
+
+  // encode float32 samples to 16-bit PCM WAV
+  function floatTo16BitPCM(output: DataView, offset: number, input: Float32Array) {
+    for (let i = 0; i < input.length; i++, offset += 2) {
+      let s = Math.max(-1, Math.min(1, input[i]));
+      s = s < 0 ? s * 0x8000 : s * 0x7fff;
+      output.setInt16(offset, s, true);
+    }
+  }
+
+  function writeString(view: DataView, offset: number, str: string) {
+    for (let i = 0; i < str.length; i++) {
+      view.setUint8(offset + i, str.charCodeAt(i));
+    }
+  }
+
+  const samples = channelData;
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+
+  /* RIFF identifier */ writeString(view, 0, 'RIFF');
+  /* file length */ view.setUint32(4, 36 + samples.length * 2, true);
+  /* RIFF type */ writeString(view, 8, 'WAVE');
+  /* format chunk identifier */ writeString(view, 12, 'fmt ');
+  /* format chunk length */ view.setUint32(16, 16, true);
+  /* sample format (raw) */ view.setUint16(20, 1, true);
+  /* channel count */ view.setUint16(22, 1, true);
+  /* sample rate */ view.setUint32(24, targetRate, true);
+  /* byte rate (sampleRate * blockAlign) */ view.setUint32(28, targetRate * 2, true);
+  /* block align (channelCount * bytesPerSample) */ view.setUint16(32, 2, true);
+  /* bits per sample */ view.setUint16(34, 16, true);
+  /* data chunk identifier */ writeString(view, 36, 'data');
+  /* data chunk length */ view.setUint32(40, samples.length * 2, true);
+
+  floatTo16BitPCM(view, 44, samples);
+
+  return new Blob([view], { type: 'audio/wav' });
+}
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { Mic, Square, Upload, Play, Pause, FileAudio, CircleCheck as CheckCircle } from 'lucide-react-native';
@@ -43,6 +105,7 @@ export default function RecordScreen() {
   const pulseAnim = useSharedValue(1);
   const waveAnim = useSharedValue(0);
   const durationInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const chunkInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const animatedPulseStyle = useAnimatedStyle(() => {
     return {
@@ -82,6 +145,9 @@ export default function RecordScreen() {
       if (durationInterval.current) {
         clearInterval(durationInterval.current);
       }
+      if (chunkInterval.current) {
+        clearInterval(chunkInterval.current);
+      }
     };
   }, [isRecording]);
 
@@ -119,6 +185,33 @@ export default function RecordScreen() {
         message: currentLanguage === 'hi' ? 'घरेलू आवाजों को सुन रहे हैं...' : 'Listening for household sounds...',
         type: 'info',
       });
+
+      // Start chunked uploads: every 2 seconds, finalize the current recording chunk and upload it
+      try {
+  const CHUNK_SEC = 3;
+        if (chunkInterval.current) clearInterval(chunkInterval.current);
+        chunkInterval.current = setInterval(async () => {
+          try {
+            if (!recording) return;
+            // Stop current recording chunk
+            await recording.stopAndUnloadAsync();
+            // give the runtime a moment to finish writing the file
+            await new Promise((res) => setTimeout(res, 1000));
+            const uri = recording.getURI();
+            if (uri) {
+              // Fire-and-forget processing of the chunk (uploads to backend)
+              processAudioFile(uri).catch(e => console.warn('Chunk upload failed', e));
+            }
+            // Start a new recording chunk
+            const { recording: newRec } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+            setRecording(newRec);
+          } catch (err) {
+            console.warn('Chunk capture error', err);
+          }
+        }, CHUNK_SEC * 1000);
+      } catch (e) {
+        console.warn('Failed to start chunked uploads', e);
+      }
     } catch (err) {
       console.error('Failed to start recording', err);
       Alert.alert('Error', 'Failed to start recording. Please try again.');
@@ -132,8 +225,15 @@ export default function RecordScreen() {
     setIsProcessing(true);
 
     try {
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
+      // stop chunking loop immediately to avoid creating a new segment while stopping
+      if (chunkInterval.current) {
+        clearInterval(chunkInterval.current);
+        chunkInterval.current = null;
+      }
+  await recording.stopAndUnloadAsync();
+  // small delay to ensure file is flushed to disk
+  await new Promise((res) => setTimeout(res, 1000));
+  const uri = recording.getURI();
       
       if (uri) {
         await processAudioFile(uri);
@@ -170,26 +270,28 @@ export default function RecordScreen() {
 
       // Try to upload to backend for inference on all platforms (web & native).
       // For React Native / Expo, fetch with FormData and a file object ({ uri, name, type }) works.
-      try {
-        const form = new FormData();
-        // determine filename and mime-type
-        const filename = uploadedFile || `recording${Date.now()}.wav`;
-        const ext = filename.includes('.') ? filename.split('.').pop() : 'wav';
-        let mime = 'audio/wav';
-        if (ext === 'm4a' || ext === 'aac') mime = 'audio/mp4';
-        else if (ext === 'mp3') mime = 'audio/mpeg';
-        else if (ext === 'flac') mime = 'audio/flac';
+  try {
+  // Prepare upload form. For web we convert to a 16kHz mono WAV blob before uploading.
+  const form = new FormData();
+  const derivedName = uri.split('/').pop() || `recording${Date.now()}.wav`;
+  // force filename to .wav for backend clarity
+  const filename = (uploadedFile || derivedName).replace(/\.[^/.]+$/, '') + '.wav';
 
-        // For web, uri is a blob URL and must be appended as a Blob/File.
-        // For native (Expo) append an object with { uri, name, type }.
-        if ((Platform as any).OS === 'web') {
-          // fetch the blob from the blob:// or data URL
-          const resp = await fetch(uri);
-          const blob = await resp.blob();
-          form.append('file', blob, filename);
-        } else {
-          form.append('file', { uri, name: filename, type: mime } as any);
-        }
+  if ((Platform as any).OS === 'web') {
+    // convert to WAV (16kHz mono) in-browser to match server expectations
+    try {
+      const wavBlob = await convertToWavBlobWeb(uri, 16000);
+      form.append('file', wavBlob, filename);
+    } catch (e) {
+      console.warn('Web WAV conversion failed, falling back to raw blob', e);
+      const resp = await fetch(uri);
+      const blob = await resp.blob();
+      form.append('file', blob, filename);
+    }
+  } else {
+    // Native: attach the recorded file but present as .wav filename so server can detect/convert if needed
+    form.append('file', { uri, name: filename, type: 'audio/wav' } as any);
+  }
 
         // derive an effective backend URL so Expo Go on device uses the dev machine IP
         let backendUrl = PRED_URL;
@@ -210,11 +312,13 @@ export default function RecordScreen() {
           console.warn('Could not derive backend URL from Expo Constants', e);
         }
 
-        const r = await fetch(backendUrl, {
-          method: 'POST',
-          body: form,
-          // Do not set content-type header; let fetch set the multipart boundary
-        });
+        // Upload with a single retry for 5xx errors
+        let r = await fetch(backendUrl, { method: 'POST', body: form });
+        if (!r.ok && r.status >= 500) {
+          // wait briefly then retry once
+          await new Promise((res) => setTimeout(res, 500));
+          r = await fetch(backendUrl, { method: 'POST', body: form });
+        }
 
         if (!r.ok) {
           const txt = await r.text();
