@@ -160,7 +160,7 @@ We include start-backend.ps1 in the repo which ensures ffmpeg path is set for th
 ```bash
 .\start-backend.ps1
 ```
-# Then in another terminal:
+Then in another terminal:
 ```bash
 npx expo start -c
 ```
