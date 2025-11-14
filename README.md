@@ -41,15 +41,20 @@ Windows tips:
 
 ## Run (Development)
 
-$env:REACT_NATIVE_PACKAGER_HOSTNAME="xxx.xxx.xx.xx"
+1. $env:REACT_NATIVE_PACKAGER_HOSTNAME="xxx.xxx.xx.xx"
+
 Replace xxx.xxx.xx.xx with your IP Address of the Devices.
 
-record.tsx
+2. record.tsx
+
 const BACKEND_BASE = (global as any).BACKEND_URL || 'http://xxx.xxx.xx.xx:5000';
+
 Replace xxx.xxx.xx.xx with your IP Address of the Devices.
 
-index.js
+3. index.js
+
 global.BACKEND_URL = 'http://xx.xx.xx.xx:5000';
+
 Replace xxx.xxx.xx.xx with your IP Address of the Devices.
 
 Start the local development server:
@@ -64,12 +69,24 @@ This runs `expo start` and shows a QR code and connection options (LAN/Tunnel/Lo
 Your mobile device and laptop must be on the same Wi‑Fi network. This ensures the Expo dev server’s LAN IP is reachable from your phone.
 
 ## Run (Backend)
-
+```bash
 .\start-backend.ps1
+```
 or 
+
 Use Two Terminals 
-1. Run cd backend and Run python app.py
-2. Run .\start-backend.ps1
+1. Run
+   ```bash
+   cd backend
+   ```
+ And Run
+   ```bash
+   python app.py
+   ```
+2. Run
+   ```bash
+   .\start-backend.ps1
+   ```
 
 Backend: ffmpeg (required for mobile uploads)
 Why ffmpeg?
@@ -77,45 +94,77 @@ Why ffmpeg?
 Mobile/Expo recordings often arrive in containers (WebM / MP4 / M4A) that Python/librosa cannot decode directly.
 The backend uses ffmpeg to convert uploaded audio to 16 kHz mono WAV before creating the mel spectrogram for the model.
 If ffmpeg is not available to the backend process, non‑WAV uploads will fail and the server will return errors.
+
 Quick summary: install ffmpeg once, then start the backend in a terminal that sees ffmpeg. Start Expo in a separate terminal.
 
 1. Install ffmpeg
 Windows — non-admin (recommended)
 
-# one-line user install (downloads a static build and places bin in %USERPROFILE%\tools\ffmpeg)
+# User installation (downloads a static build and places bin in %USERPROFILE%\tools\ffmpeg)
+```bash
 a. $dest = Join-Path $env:USERPROFILE 'tools\ffmpeg'; New-Item -ItemType Directory -Path $dest -Force
+```
+```bash
 b. $zip = Join-Path $env:TEMP 'ffmpeg.zip'
+```
+```bash
 c. Invoke-WebRequest -Uri 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip' -OutFile $zip
+```
+```bash
 d. $extract = Join-Path $env:TEMP 'ffmpeg_extract'
+```
+```bash
 e. Remove-Item -Recurse -Force $extract -ErrorAction SilentlyContinue
+```
+```bash
 f. Expand-Archive -Path $zip -DestinationPath $extract -Force
+```
+```bash
 g. $inner = Get-ChildItem -Path $extract -Directory | Select-Object -First 1
+```
+```bash
 h. Copy-Item -Path (Join-Path $inner.FullName 'bin\*') -Destination $dest -Recurse -Force
-# add to user PATH for future sessions
+```
+
+# Add to user PATH for future sessions
+```bash
 i. $old = [Environment]::GetEnvironmentVariable('PATH','User'); [Environment]::SetEnvironmentVariable('PATH', "$dest;$old",'User')
-# make available in current shell immediately
+```
+# Make available in current shell immediately
+```bash
 j. $env:PATH = "$dest;$env:PATH"
+```
+```bash
 h. ffmpeg -version
+```
 
 2. Restart backend so it can see ffmpeg
+
 The running backend process inherits PATH from the shell that launched it. After installing or adding ffmpeg to PATH:
 
 Open a new terminal (PowerShell / bash).
 
 Confirm ffmpeg is visible:
+```bash
 a. ffmpeg -version
+```
+```bash
 b. python -c "import shutil; print(shutil.which('ffmpeg'))"
-
+```
 Both should show a path and version.
 
 3. Run both quickly (convenience)
+   
 We include start-backend.ps1 in the repo which ensures ffmpeg path is set for the spawned backend. Use it from repository root:
-
+```bash
 .\start-backend.ps1
-# then in another terminal:
+```
+# Then in another terminal:
+```bash
 npx expo start -c
-
+```
 Steps:
+
 1. Connect both devices to the same Wi‑Fi (same router SSID). Guest networks/hotspots may restrict LAN access.
 2. After `npx expo start -c`, the Expo Dev Tools open. Keep the connection type as "LAN" (default). If LAN is blocked, allow through Firewall or temporarily switch to "Tunnel" (slower, uses internet).
 3. Open Expo Go on your phone:
