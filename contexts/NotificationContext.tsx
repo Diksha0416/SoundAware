@@ -14,7 +14,8 @@ interface NotificationContextType {
   notifications: Notification[];
   addNotification: (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => void;
   markAsRead: (id: string) => void;
-  clearAll: () => void;
+  clearAll: () => Promise<boolean>;
+  restoreNotifications: (items: Notification[]) => Promise<void>;
   unreadCount: number;
   notificationsEnabled: boolean;
   setNotificationsEnabled: (enabled: boolean) => void;
@@ -97,7 +98,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
   };
 
-  const clearAll = async () => {
+  const clearAll = async (): Promise<boolean> => {
     try {
       // First clear from AsyncStorage
       await AsyncStorage.removeItem('notifications');
@@ -110,17 +111,27 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
   };
 
+  const restoreNotifications = async (items: Notification[]) => {
+    try {
+      await AsyncStorage.setItem('notifications', JSON.stringify(items));
+      setNotifications(items);
+    } catch (error) {
+      console.error('Error restoring notifications:', error);
+    }
+  };
+
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
     <NotificationContext.Provider value={{
-      notifications,
-      addNotification,
-      markAsRead,
-      clearAll,
-      unreadCount,
-      notificationsEnabled,
-      setNotificationsEnabled,
+    notifications,
+    addNotification,
+    markAsRead,
+    clearAll,
+    restoreNotifications,
+    unreadCount,
+    notificationsEnabled,
+    setNotificationsEnabled,
     }}>
       {children}
     </NotificationContext.Provider>

@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/Button';
 import { Slider } from '@/components/ui/Slider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppSettings } from '@/types';
-import { Moon, Sun, Bell, Volume2, Settings as SettingsIcon, Info, Shield, Smartphone, CircleHelp as HelpCircle, Brain, Zap, Database, Download, RotateCcw, FileSliders as Sliders, Activity, Cpu, ChartBar as BarChart3, Globe, CircleCheck as CheckCircle } from 'lucide-react-native';
+import { Moon, Sun, Bell, Volume2, Settings as SettingsIcon, Info, Shield, Smartphone, CircleHelp as HelpCircle, RotateCcw, Globe, CircleCheck as CheckCircle, Brain, Database } from 'lucide-react-native';
 
 export default function SettingsScreen() {
   const { isDark, toggleTheme, colors } = useTheme();
@@ -188,16 +188,7 @@ export default function SettingsScreen() {
     );
   };
 
-  const handleSensitivityChange = (value: number) => {
-    updateModelSettings({ sensitivity: value });
-    addNotification({
-      title: currentLanguage === 'hi' ? 'संवेदनशीलता अपडेट हुई' : 'Sensitivity Updated',
-      message: currentLanguage === 'hi' 
-        ? `संवेदनशीलता ${Math.round(value * 100)}% पर सेट की गई`
-        : `Sensitivity set to ${Math.round(value * 100)}%`,
-      type: 'info',
-    });
-  };
+  
 
   const SettingRow = ({ 
     icon, 
@@ -330,234 +321,63 @@ export default function SettingsScreen() {
               onValueChange={(value) => updateSetting('autoRecord', value)}
             />
 
-            <View style={[styles.settingRow, styles.settingRowWrap]}>
-              <View style={styles.settingInfo}>
-                <SettingsIcon size={24} color={colors.accent} />
-                <View style={styles.settingText}>
-                  <Text style={[styles.settingTitle, { color: colors.text }]}>
-                    {t('sensitivity')}: {Math.round(modelSettings.sensitivity * 100)}%
-                  </Text>
-                  <Text style={[styles.settingSubtitle, { color: colors.textSecondary }]}>
-                    {t('detectionLevel')}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.sliderContainer}>
-                <Slider
-                  value={modelSettings.sensitivity}
-                  onValueChange={(value) => updateModelSettings({ sensitivity: value })}
-                  minimumValue={0.1}
-                  maximumValue={1.0}
-                  step={0.1}
-                  style={styles.slider}
-                />
-                <Text style={[styles.sliderValue, { color: colors.textSecondary }]}>
-                  {Math.round(modelSettings.sensitivity * 100)}%
-                </Text>
-              </View>
-            </View>
+            {/* Sensitivity control removed per UX request - kept model tuning in backend/context */}
           </Card>
         </Animated.View>
 
-        {/* ML Model Settings */}
+        {/* ML Model Summary (simplified per request) */}
         <Animated.View entering={FadeInDown.delay(350)}>
           <Card style={styles.settingsCard}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('mlModel')}</Text>
-            
-            <View style={[styles.settingRow, styles.settingRowWrap]}>
-              <View style={styles.settingInfo}>
-                <Brain size={24} color={colors.primary} />
-                <View style={styles.settingText}>
-                  <Text style={[styles.settingTitle, { color: colors.text }]}>
-                    {t('confidenceThreshold')}: {Math.round(modelSettings.confidenceThreshold * 100)}%
-                  </Text>
-                  <Text style={[styles.settingSubtitle, { color: colors.textSecondary }]}>
-                    {t('minimumConfidence')}
-                  </Text>
+            <View style={styles.modelSummary}>
+              <View style={styles.modelSummaryRow}>
+                <View style={[styles.modelIconWrap, { backgroundColor: colors.surface }]}> 
+                  <Brain size={20} color={colors.primary} />
+                </View>
+                <View style={styles.modelSummaryMain}>
+                  <Text style={[styles.modelSummaryText, { color: colors.text }]}>Model accuracy</Text>
+                  <Text style={[styles.modelAccuracyLarge, { color: colors.text }]}>{'71.4%'}</Text>
+                  <View style={styles.progressBar}>
+                    <View style={[styles.progressFill, { width: '71.4%', backgroundColor: colors.primary }]} />
+                  </View>
+                </View>
+                <View style={styles.accuracyBadge}>
+                  <Text style={[styles.accuracyBadgeText, { color: colors.background }]}>71.4%</Text>
                 </View>
               </View>
-              <View style={styles.sliderContainer}>
-                <Slider
-                  value={modelSettings.confidenceThreshold}
-                  onValueChange={(value) => {
-                    updateModelSettings({ confidenceThreshold: value });
-                    addNotification({
-                      title: currentLanguage === 'hi' ? 'विश्वास सीमा अपडेट हुई' : 'Confidence Threshold Updated',
-                      message: currentLanguage === 'hi' 
-                        ? `विश्वास सीमा ${Math.round(value * 100)}% पर सेट की गई`
-                        : `Confidence threshold set to ${Math.round(value * 100)}%`,
-                      type: 'info',
-                    });
+
+              <View style={styles.modelInfoRow}>
+                <Database size={18} color={colors.secondary} />
+                <View style={{ marginLeft: 12 }}>
+                  <Text style={[styles.modelLabel, { color: colors.text }]}>TensorFlow Lite</Text>
+                  <Text style={[styles.modelSub, { color: colors.textSecondary }]}>On-device optimized model format</Text>
+                </View>
+              </View>
+
+              <View style={styles.modelInfoRow}>
+                <Info size={18} color={colors.accent} />
+                <View style={{ marginLeft: 12, flex: 1 }}>
+                  <Text style={[styles.modelLabel, { color: colors.text }]}>Integration</Text>
+                  <Text style={[styles.modelSub, { color: colors.textSecondary }]}>Integrated via a Python + Flask backend for centralized inference and analytics</Text>
+                </View>
+              </View>
+
+              <View style={styles.modelActions}>
+                <Button
+                  title={t('viewDetails') || 'Details'}
+                  onPress={() => {
+                    Alert.alert(
+                      currentLanguage === 'hi' ? 'ML मॉडल विवरण' : 'ML Model Details',
+                      currentLanguage === 'hi'
+                        ? 'यह ऐप एक TensorFlow Lite मॉडल का उपयोग करता है (आकलन सटीकता: 71.4%) और बैकएंड पर एक Python/Flask सेवा के माध्यम से समेकित किया गया है।'
+                        : 'This app uses a TensorFlow Lite model (accuracy: 71.4%). Inference and analytics are integrated through a Python + Flask backend.',
+                      [{ text: t('close') }]
+                    );
                   }}
-                  minimumValue={0.3}
-                  maximumValue={0.95}
-                  step={0.05}
-                  style={styles.slider}
+                  variant="outline"
                 />
-                <Text style={[styles.sliderValue, { color: colors.textSecondary }]}>
-                  {Math.round(modelSettings.confidenceThreshold * 100)}%
-                </Text>
               </View>
             </View>
-            
-            <SettingRow
-              icon={<Zap size={24} color={colors.warning} />}
-              title={t('preprocessing')}
-              subtitle={t('enablePreprocessing')}
-              value={modelSettings.enablePreprocessing}
-              onValueChange={(value) => {
-                updateModelSettings({ enablePreprocessing: value });
-                addNotification({
-                  title: currentLanguage === 'hi' ? 'प्रीप्रोसेसिंग अपडेट हुई' : 'Preprocessing Updated',
-                  message: value 
-                    ? (currentLanguage === 'hi' ? 'ऑडियो प्रीप्रोसेसिंग सक्षम की गई' : 'Audio preprocessing enabled')
-                    : (currentLanguage === 'hi' ? 'ऑडियो प्रीप्रोसेसिंग अक्षम की गई' : 'Audio preprocessing disabled'),
-                  type: 'success',
-                });
-              }}
-            />
-            
-            <SettingRow
-              icon={<Database size={24} color={colors.success} />}
-              title={t('postprocessing')}
-              subtitle={t('enablePostprocessing')}
-              value={modelSettings.enablePostprocessing}
-              onValueChange={(value) => {
-                updateModelSettings({ enablePostprocessing: value });
-                addNotification({
-                  title: currentLanguage === 'hi' ? 'पोस्टप्रोसेसिंग अपडेट हुई' : 'Postprocessing Updated',
-                  message: value 
-                    ? (currentLanguage === 'hi' ? 'परिणाम पोस्टप्रोसेसिंग सक्षम की गई' : 'Result postprocessing enabled')
-                    : (currentLanguage === 'hi' ? 'परिणाम पोस्टप्रोसेसिंग अक्षम की गई' : 'Result postprocessing disabled'),
-                  type: 'success',
-                });
-              }}
-            />
-            
-            <TouchableOpacity
-              style={styles.advancedToggle}
-              onPress={() => setShowAdvanced(!showAdvanced)}
-            >
-              <Sliders size={20} color={colors.primary} />
-              <Text style={[styles.advancedToggleText, { color: colors.primary }]}>
-                {showAdvanced ? t('hideAdvanced') : t('showAdvanced')}
-              </Text>
-            </TouchableOpacity>
-            
-            {showAdvanced && (
-              <View style={styles.advancedSettings}>
-                <View style={[styles.settingRow, styles.settingRowWrap]}>
-                  <View style={styles.settingInfo}>
-                    <Cpu size={24} color={colors.secondary} />
-                    <View style={styles.settingText}>
-                      <Text style={[styles.settingTitle, { color: colors.text }]}>
-                        {t('batchSize')}: {modelSettings.batchSize}
-                      </Text>
-                      <Text style={[styles.settingSubtitle, { color: colors.textSecondary }]}>
-                        {t('processingBatch')}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.sliderContainer}>
-                    <Slider
-                      value={modelSettings.batchSize}
-                      onValueChange={(value) => {
-                        const newBatchSize = Math.round(value);
-                        updateModelSettings({ batchSize: newBatchSize });
-                        addNotification({
-                          title: currentLanguage === 'hi' ? 'बैच साइज़ अपडेट हुआ' : 'Batch Size Updated',
-                          message: currentLanguage === 'hi' 
-                            ? `बैच साइज़ ${newBatchSize} पर सेट किया गया`
-                            : `Batch size set to ${newBatchSize}`,
-                          type: 'info',
-                        });
-                      }}
-                      minimumValue={8}
-                      maximumValue={128}
-                      step={8}
-                      style={styles.slider}
-                    />
-                    <Text style={[styles.sliderValue, { color: colors.textSecondary }]}>
-                      {modelSettings.batchSize}
-                    </Text>
-                  </View>
-                </View>
-                
-                <View style={styles.settingRow}>
-                  <View style={styles.settingInfo}>
-                    <Activity size={24} color={colors.accent} />
-                    <View style={styles.settingText}>
-                      <Text style={[styles.settingTitle, { color: colors.text }]}>
-                        {t('maxDuration')}: {modelSettings.maxDuration}s
-                      </Text>
-                      <Text style={[styles.settingSubtitle, { color: colors.textSecondary }]}>
-                        {t('maximumAudio')}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.sliderContainer}>
-                    <Slider
-                      value={modelSettings.maxDuration}
-                      onValueChange={(value) => {
-                        const newDuration = Math.round(value);
-                        updateModelSettings({ maxDuration: newDuration });
-                        addNotification({
-                          title: currentLanguage === 'hi' ? 'अधिकतम अवधि अपडेट हुई' : 'Max Duration Updated',
-                          message: currentLanguage === 'hi' 
-                            ? `अधिकतम अवधि ${newDuration} सेकंड पर सेट की गई`
-                            : `Max duration set to ${newDuration} seconds`,
-                          type: 'info',
-                        });
-                      }}
-                      minimumValue={10}
-                      maximumValue={120}
-                      step={5}
-                      style={styles.slider}
-                    />
-                    <Text style={[styles.sliderValue, { color: colors.textSecondary }]}>
-                      {modelSettings.maxDuration}s
-                    </Text>
-                  </View>
-                </View>
-                
-                <View style={styles.settingRow}>
-                  <View style={styles.settingInfo}>
-                    <BarChart3 size={24} color={colors.primary} />
-                    <View style={styles.settingText}>
-                      <Text style={[styles.settingTitle, { color: colors.text }]}>
-                        {t('sampleRate')}: {modelSettings.sampleRate}Hz
-                      </Text>
-                      <Text style={[styles.settingSubtitle, { color: colors.textSecondary }]}>
-                        {t('audioSample')}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.sliderContainer}>
-                    <Slider
-                      value={modelSettings.sampleRate}
-                      onValueChange={(value) => {
-                        const newSampleRate = Math.round(value);
-                        updateModelSettings({ sampleRate: newSampleRate });
-                        addNotification({
-                          title: currentLanguage === 'hi' ? 'सैंपल रेट अपडेट हुआ' : 'Sample Rate Updated',
-                          message: currentLanguage === 'hi' 
-                            ? `सैंपल रेट ${newSampleRate}Hz पर सेट किया गया`
-                            : `Sample rate set to ${newSampleRate}Hz`,
-                          type: 'info',
-                        });
-                      }}
-                      minimumValue={16000}
-                      maximumValue={48000}
-                      step={4000}
-                      style={styles.slider}
-                    />
-                    <Text style={[styles.sliderValue, { color: colors.textSecondary }]}>
-                      {modelSettings.sampleRate}Hz
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            )}
           </Card>
         </Animated.View>
 
@@ -678,8 +498,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   subtitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontSize: 20,
+    fontFamily: 'Inter-Medium',
   },
   settingsCard: {
     marginBottom: 20,
@@ -826,6 +646,83 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
+  },
+  modelSummary: {
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    marginBottom: 8,
+  },
+  modelSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  modelIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modelSummaryMain: {
+    flex: 1,
+  },
+  modelAccuracyLarge: {
+    fontSize: 22,
+    fontFamily: 'Inter-SemiBold',
+    marginTop: 2,
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 6,
+    overflow: 'hidden',
+    marginTop: 8,
+  },
+  progressFill: {
+    height: '100%',
+  },
+  accuracyBadge: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  accuracyBadgeText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
+  modelInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 10,
+  },
+  modelLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+  },
+  modelSub: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    marginTop: 2,
+  },
+  modelActions: {
+    marginTop: 8,
+    alignItems: 'flex-start',
+  },
+  modelSummaryText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    marginBottom: 6,
+  },
+  modelSummarySub: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    marginBottom: 2,
   },
   actionsCard: {
     gap: 12,

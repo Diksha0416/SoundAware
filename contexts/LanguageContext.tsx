@@ -39,7 +39,7 @@ const translations = {
     noDetectionsYet: 'No detections yet. Start recording to see results!',
     
     // Record Screen
-    recordTitle: 'Sound Recording',
+    recordTitle: 'Audio Capture Center',
     recordSubtitle: 'Record audio to classify household sounds',
     tapToStart: 'Tap to start recording',
     recording: 'Recording...',
@@ -71,9 +71,9 @@ const translations = {
     noNotifications: 'No Notifications',
     seeAlertsHere: 'You\'ll see alerts and updates here',
     
-    // Settings
-    settingsTitle: 'Settings',
-    customizeExperience: 'Customize your sound detection experience',
+  // Settings
+  settingsTitle: 'Settings',
+  customizeExperience: 'Where your choices shape your smart home',
     appearance: 'Appearance',
     darkMode: 'Dark Mode',
     toggleThemes: 'Toggle between light and dark themes',
@@ -112,10 +112,11 @@ const translations = {
     getHelp: 'Get Help',
     resetMLModel: 'Reset ML Model',
     resetMLModelDesc: 'Reset all ML model settings to defaults',
+  viewDetails: 'Details',
     
-    // AI Chat
-    aiAssistant: 'AI Assistant',
-    askAboutSound: 'Ask me about sound classification',
+  // AI Chat
+  aiAssistant: 'AI Assistant',
+  askAboutSound: 'Your home’s drama analyst — powered by AI',
     aiTyping: 'AI is typing...',
     askAnything: 'Ask me anything...',
     voiceAssistant: 'Voice Assistant',
@@ -245,10 +246,11 @@ const translations = {
     resetSettings: 'सेटिंग्स रीसेट करें',
     getHelp: 'सहायता प्राप्त करें',
     resetMLModel: 'ML मॉडल रीसेट करें',
+  viewDetails: 'विवरण',
     
     // AI Chat
     aiAssistant: 'AI सहायक',
-    askAboutSound: 'मुझसे ध्वनि वर्गीकरण के बारे में पूछें',
+  askAboutSound: 'आपके घर का ड्रामा विश्लेषक — AI द्वारा संचालित',
     aiTyping: 'AI टाइप कर रहा है...',
     askAnything: 'मुझसे कुछ भी पूछें...',
     
@@ -376,7 +378,7 @@ const translations = {
     
     // AI Chat
     aiAssistant: 'AI ਸਹਾਇਕ',
-    askAboutSound: 'ਮੈਨੂੰ ਆਵਾਜ਼ ਵਰਗੀਕਰਨ ਬਾਰੇ ਪੁੱਛੋ',
+  askAboutSound: 'ਤੁਹਾਡੇ ਘਰ ਦਾ ਡਰਾਮਾ ਵਿਸ਼ਲੇਸ਼ਕ — AI ਨਾਲ ਚਲਾਇਆ ਗਿਆ',
     aiTyping: 'AI ਟਾਈਪ ਕਰ ਰਿਹਾ ਹੈ...',
     askAnything: 'ਮੈਨੂੰ ਕੁਝ ਵੀ ਪੁੱਛੋ...',
     

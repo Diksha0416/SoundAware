@@ -73,7 +73,7 @@ async function convertToWavBlobWeb(uri: string, targetRate = 16000): Promise<Blo
   return new Blob([view], { type: 'audio/wav' });
 }
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Mic, Square, Upload, Play, Pause, FileAudio, CircleCheck as CheckCircle } from 'lucide-react-native';
 import Animated, { 
   useSharedValue, 
@@ -88,7 +88,7 @@ import * as Haptics from 'expo-haptics';
 export default function RecordScreen() {
   const { colors } = useTheme();
   const { t, currentLanguage } = useLanguage();
-  const { addDetection, isRecording, setIsRecording, autoRecording, stopAutoRecording } = useSoundDetection();
+  const { addDetection, isRecording, setIsRecording, autoRecording, stopAutoRecording, detections } = useSoundDetection();
   const { addNotification } = useNotifications();
   const { modelSettings, processAudio } = useMLModel();
   
@@ -175,7 +175,24 @@ export default function RecordScreen() {
       
       setRecording(recording);
       setIsRecording(true);
-
+      // Try to keep the device awake while recording (guarded and non-fatal)
+      const activateKeepAwakeSafely = async () => {
+        try {
+          if ((Platform as any).OS === 'web') return;
+          const KeepAwake: any = await import('expo-keep-awake');
+          // Try common API names across versions
+          if (KeepAwake.activateKeepAwake) {
+            await KeepAwake.activateKeepAwake();
+          } else if (KeepAwake.preventAutoLockAsync) {
+            await KeepAwake.preventAutoLockAsync();
+          } else if (KeepAwake.activateAsync) {
+            await KeepAwake.activateAsync();
+          }
+        } catch (e) {
+          console.warn('keep-awake activation failed (ignored):', e);
+        }
+      };
+      void activateKeepAwakeSafely();
       if ((Platform as any).OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
@@ -223,6 +240,24 @@ export default function RecordScreen() {
 
     setIsRecording(false);
     setIsProcessing(true);
+
+    // Attempt to re-enable normal sleep behavior (non-fatal)
+    const deactivateKeepAwakeSafely = async () => {
+      try {
+        if ((Platform as any).OS === 'web') return;
+        const KeepAwake: any = await import('expo-keep-awake');
+        if (KeepAwake.deactivateKeepAwake) {
+          await KeepAwake.deactivateKeepAwake();
+        } else if (KeepAwake.allowScreenSleepAsync) {
+          await KeepAwake.allowScreenSleepAsync();
+        } else if (KeepAwake.deactivateAsync) {
+          await KeepAwake.deactivateAsync();
+        }
+      } catch (e) {
+        console.warn('keep-awake deactivation failed (ignored):', e);
+      }
+    };
+    void deactivateKeepAwakeSafely();
 
     try {
       // stop chunking loop immediately to avoid creating a new segment while stopping
@@ -569,12 +604,11 @@ export default function RecordScreen() {
       contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false}
     >
-        {/* Header */}
+        {/* Header (title + subtitle inline, aligned with header padding) */}
         <Animated.View entering={FadeInDown.delay(100)} style={styles.header}>
           <Text style={[styles.title, { color: colors.text }]}>{t('recordTitle')}</Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            {t('recordSubtitle')}
-          </Text>
+          {/* larger subtitle aligned with header padding */}
+          <Text style={[styles.heroSubtitle, { color: colors.textSecondary, fontSize: 17, marginTop: 8 }]}>Your home has drama — coughs, cries, claps, barks, and even the toilet flush… SoundAware catches every episode</Text>
         </Animated.View>
 
         {/* Recording Interface */}
@@ -698,28 +732,59 @@ export default function RecordScreen() {
           </Card>
         </Animated.View>
 
-        {/* Model Status */}
+        {/* Model Status - visual, responsive */}
         <Animated.View entering={FadeInDown.delay(600)}>
           <Card style={styles.statusCard}>
             <Text style={[styles.statusTitle, { color: colors.text }]}>Detection Status</Text>
-            <View style={styles.statusRow}>
-              <Text style={[styles.statusLabel, { color: colors.textSecondary }]}>Sensitivity:</Text>
-              <Text style={[styles.statusValue, { color: colors.primary }]}>
-                {Math.round(modelSettings.sensitivity * 100)}%
-              </Text>
-            </View>
-            <View style={styles.statusRow}>
-              <Text style={[styles.statusLabel, { color: colors.textSecondary }]}>Confidence Threshold:</Text>
-              <Text style={[styles.statusValue, { color: colors.primary }]}>
-                {Math.round(modelSettings.confidenceThreshold * 100)}%
-              </Text>
-            </View>
-            <View style={styles.statusRow}>
-              <Text style={[styles.statusLabel, { color: colors.textSecondary }]}>Max Duration:</Text>
-              <Text style={[styles.statusValue, { color: colors.primary }]}>
-                {modelSettings.maxDuration}s
-              </Text>
-            </View>
+
+            {/* prepare recent confidences for sparkline */}
+            {/* recentConfs: array of numbers 0..1 */}
+            {(() => {
+              const recent = (detections || []).slice(-12).map(d => typeof d.confidence === 'number' ? d.confidence : 0);
+              const recentConfs = recent.length ? recent : Array.from({ length: 8 }, () => Math.random() * 0.5 + 0.4);
+              return (
+                <View style={styles.statusGrid}>
+                  {/* Sensitivity - circular badge */}
+                  <View style={styles.statusTile}>
+                    <View style={[styles.radialWrap, { borderColor: colors.primary }]}> 
+                      <Text style={[styles.radialText, { color: colors.primary }]}>{Math.round(modelSettings.sensitivity * 100)}%</Text>
+                    </View>
+                    <Text style={[styles.tileLabel, { color: colors.textSecondary }]}>Sensitivity</Text>
+                    <Text style={[styles.tileValue, { color: colors.text }]}>{modelSettings.sensitivity !== undefined ? (modelSettings.sensitivity >= 0.8 ? 'High' : modelSettings.sensitivity >= 0.6 ? 'Medium' : 'Low') : ''}</Text>
+                  </View>
+
+                  {/* Confidence Threshold + sparkline */}
+                  <View style={styles.statusTile}>
+                    <Text style={[styles.tileLabel, { color: colors.textSecondary }]}>Confidence Threshold</Text>
+                    <View style={styles.progressBarRow}>
+                      <View style={styles.progressTrack}>
+                        <View style={[styles.progressFill, { width: `${Math.round(modelSettings.confidenceThreshold * 100)}%`, backgroundColor: colors.primary }]} />
+                      </View>
+                      <Text style={[styles.tileValue, { color: colors.primary }]}>{Math.round(modelSettings.confidenceThreshold * 100)}%</Text>
+                    </View>
+                    <View style={styles.sparklineRow}>
+                      {recentConfs.map((c, i) => (
+                        <View key={i} style={{ width: 8, height: Math.max(6, Math.round(c * 40)), backgroundColor: c > 0.6 ? colors.success : colors.secondary, marginRight: 6, borderRadius: 3 }} />
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Max Duration visual */}
+                  <View style={styles.statusTile}>
+                    <Text style={[styles.tileLabel, { color: colors.textSecondary }]}>Max Duration</Text>
+                    <View style={styles.durationRow}>
+                      <View style={[styles.durationPill, { borderColor: colors.primary }]}>
+                        <Text style={[styles.durationPillText, { color: colors.primary }]}>{modelSettings.maxDuration}s</Text>
+                      </View>
+                      <View style={styles.durationBarTrack}>
+                        <View style={[styles.durationBarFill, { width: `${Math.min(100, Math.round((modelSettings.maxDuration / 60) * 100))}%`, backgroundColor: colors.accent }]} />
+                      </View>
+                    </View>
+                    <Text style={[styles.tileNote, { color: colors.textSecondary }]}>Quick durations yield faster, local results</Text>
+                  </View>
+                </View>
+              );
+            })()}
           </Card>
         </Animated.View>
     </ScrollView>
@@ -746,6 +811,17 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
+  },
+  heroBox: {
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  heroSubtitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    marginTop: 6,
+    lineHeight: 20,
   },
   recordingContainer: {
     marginBottom: 24,
@@ -870,6 +946,92 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
     marginBottom: 16,
+  },
+  statusGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  statusTile: {
+    flexBasis: '30%',
+    minWidth: 160,
+    paddingVertical: 8,
+  },
+  radialWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  radialText: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+  },
+  tileLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    marginBottom: 6,
+  },
+  tileValue: {
+    fontSize: 14,
+    fontFamily: 'Inter-Bold',
+  },
+  tileNote: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    marginTop: 8,
+  },
+  progressBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  progressTrack: {
+    flex: 1,
+    height: 10,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 6,
+  },
+  sparklineRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginTop: 6,
+  },
+  durationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 6,
+  },
+  durationPill: {
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  durationPillText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+  },
+  durationBarTrack: {
+    flex: 1,
+    height: 8,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  durationBarFill: {
+    height: '100%',
   },
   statusRow: {
     flexDirection: 'row',

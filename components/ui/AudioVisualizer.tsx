@@ -151,7 +151,7 @@ export function AudioVisualizer({
   };
 
   return (
-    <View style={[styles.container, { height }]}>
+    <View style={[styles.container, { height, overflow: 'hidden', width: '100%' }]}>
       {type === 'waveform' && renderWaveform()}
       {type === 'bars' && renderBars()}
       {type === 'circle' && renderCircle()}
