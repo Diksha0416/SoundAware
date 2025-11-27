@@ -300,10 +300,7 @@ export default function RecordScreen() {
     try {
       // If running in the browser, upload the file to the backend /predict endpoint
       // so the backend TFLite model (contexts/model_int8.tflite) does the inference.
-      // Prefer a build-time env var (NEXT_PUBLIC_API_URL) when available (used by Vercel/Next).
-      const BACKEND_BASE = (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_API_URL)
-        ? ((process as any).env.NEXT_PUBLIC_API_URL as string).replace(/\/$/, '')
-        : ((global as any).BACKEND_URL || 'http://192.168.29.32:5000');
+      const BACKEND_BASE = (global as any).BACKEND_URL || 'http://192.168.29.32:5000';
       const PRED_URL = `${BACKEND_BASE}/predict`;
 
       // Try to upload to backend for inference on all platforms (web & native).
@@ -374,49 +371,121 @@ export default function RecordScreen() {
         }
       }
 
-        // derive an effective backend URL so Expo Go on device uses the dev machine IP
-        let backendUrl = PRED_URL;
+        // Try multiple backend candidates (env, global override, derived LAN IP, localhost)
+        const candidates: string[] = [];
+        const envApi = (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_API_URL)
+          ? ((process as any).env.NEXT_PUBLIC_API_URL as string).replace(/\/$/, '')
+          : '';
+        if (envApi) candidates.push(envApi);
+        if ((global as any).BACKEND_URL) candidates.push((global as any).BACKEND_URL.replace(/\/$/, ''));
+
         try {
-          // If PRED_URL is localhost/127.0.0.1, try to derive the LAN IP from Expo Constants
-          const usesLocal = !backendUrl || backendUrl.includes('localhost') || backendUrl.includes('127.0.0.1');
-          if (usesLocal) {
-            // Expo provides debuggerHost like '192.168.29.32:8081' when running via LAN
-            const dbg = (Constants && (Constants.manifest?.debuggerHost || (Constants.manifest2 && Constants.manifest2.debuggerHost))) || null;
-            if (dbg) {
-              const derivedIp = dbg.split(':')[0];
-              backendUrl = `http://${derivedIp}:5000/predict`;
-            } else if (typeof window !== 'undefined' && window.location && window.location.hostname) {
-              backendUrl = `http://${window.location.hostname}:5000/predict`;
-            }
+          const dbg = (Constants && (Constants.manifest?.debuggerHost || (Constants as any).manifest2?.debuggerHost)) || null;
+          if (dbg) {
+            const derivedIp = String(dbg).split(':')[0];
+            candidates.push(`http://${derivedIp}:5000`);
+          } else if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+            candidates.push(`http://${window.location.hostname}:5000`);
           }
         } catch (e) {
-          console.warn('Could not derive backend URL from Expo Constants', e);
+          console.warn('Could not derive backend candidate from Expo Constants', e);
         }
 
-        // Attach optional API key from build-time env var (only use if intentionally public)
+        // include common localhost and emulator addresses
+        candidates.push('http://127.0.0.1:5000');
+        candidates.push('http://192.168.29.32:5000');
+        // Android emulator (default) -> host machine
+        candidates.push('http://10.0.2.2:5000');
+        // Genymotion emulator
+        candidates.push('http://10.0.3.2:5000');
+
+        // optional public API key header
         const headers: Record<string, string> = {};
-        if (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_PRED_API_KEY) {
-          headers['x-api-key'] = (process as any).env.NEXT_PUBLIC_PRED_API_KEY;
+        const envKey = (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_PRED_API_KEY)
+          ? (process as any).env.NEXT_PUBLIC_PRED_API_KEY as string
+          : '';
+        if (envKey) headers['x-api-key'] = envKey;
+
+        // Helper: quick health check to prefer reachable candidate (avoids long timeouts on mobile)
+        const checkHealth = async (base: string) => {
+          const url = `${base.replace(/\/$/, '')}/health`;
+          try {
+            // timeout after 2s
+            const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 2000));
+            const req = fetch(url, { method: 'GET' });
+            const res = await Promise.race([req, timeout]) as Response;
+            return res && res.ok;
+          } catch (e) {
+            return false;
+          }
+        };
+
+        // probe candidates and pick the first reachable one
+        let reachable: string | null = null;
+        for (const c of candidates) {
+          try {
+            const ok = await checkHealth(c);
+            console.log('[processAudioFile] health check', c, ok);
+            if (ok) {
+              reachable = c;
+              break;
+            }
+          } catch (e) {
+            // continue
+          }
         }
 
-        // Upload with a single retry for 5xx errors
-        let r = await fetch(backendUrl, { method: 'POST', body: form, headers });
-        if (!r.ok && r.status >= 500) {
-          // wait briefly then retry once
-          await new Promise((res) => setTimeout(res, 500));
-          r = await fetch(backendUrl, { method: 'POST', body: form, headers });
+        let json: any = null;
+        let lastErr: any = null;
+
+        const attemptUpload = async (base: string) => {
+          const url = `${base.replace(/\/$/, '')}/predict`;
+          try {
+            try { console.log('[processAudioFile] uploading to', url, 'headers:', headers); } catch (e) {}
+            let r = await fetch(url, { method: 'POST', body: form, headers });
+            if (!r.ok && r.status >= 500) {
+              await new Promise((res) => setTimeout(res, 500));
+              r = await fetch(url, { method: 'POST', body: form, headers });
+            }
+            if (!r.ok) {
+              const txt = await r.text();
+              throw new Error(`Server error ${r.status}: ${txt}`);
+            }
+            const j = await r.json();
+            try { console.log('[processAudioFile] backend response', j); } catch (e) {}
+            return j;
+          } catch (err) {
+            console.warn('processAudioFile: attempt failed for', url, err);
+            throw err;
+          }
+        };
+
+        if (reachable) {
+          try {
+            json = await attemptUpload(reachable);
+          } catch (e) {
+            lastErr = e;
+          }
+        } else {
+          // if no health checks passed, try candidates sequentially (best-effort)
+          for (const base of candidates) {
+            try {
+              json = await attemptUpload(base);
+              break;
+            } catch (e) {
+              lastErr = e;
+              continue;
+            }
+          }
         }
 
-        if (!r.ok) {
-          const txt = await r.text();
-          throw new Error(`Server error ${r.status}: ${txt}`);
+        if (!json) {
+          throw lastErr || new Error('All backend candidates failed');
         }
 
-        const json = await r.json();
-
-        // json contains pred_label, pred_idx, scores
-        const label = json.pred_label || json.pred_label || 'Unknown';
-        const confidence = json.scores && typeof json.pred_idx === 'number' ? json.scores[json.pred_idx] : null;
+        // Prefer pred_label, else top_k[0].label, else Unknown
+        const label = (json && (json.pred_label || (json.top_k && json.top_k[0] && json.top_k[0].label))) || 'Unknown';
+        const confidence = (json && typeof json.pred_idx === 'number' && json.scores) ? json.scores[json.pred_idx] : (json && json.top_k && json.top_k[0] ? json.top_k[0].score : null);
 
         addDetection({
           soundType: label,

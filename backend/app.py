@@ -19,9 +19,32 @@ def load_pred_module(project_root):
 
 def create_app():
     app = Flask(__name__)
-    # Allow configuring CORS origins via environment variable. Default to the Vercel app domain.
-    cors_origins = os.environ.get('CORS_ORIGINS', 'https://sound-aware.vercel.app')
-    CORS(app, origins=cors_origins)
+    # Allow configuring CORS origins via environment variable.
+    # Default includes the Vercel app domain and common localhost origins used during development.
+    env_origins = os.environ.get('CORS_ORIGINS')
+    dev_allow_all = os.environ.get('DEV_ALLOW_ALL_ORIGINS') in ('1', 'true', 'True')
+    if dev_allow_all:
+        cors_origins = '*'
+    else:
+        if env_origins:
+            cors_origins = [o.strip() for o in env_origins.split(',') if o.strip()]
+        else:
+            # include common localhost/Metro/Expo web origins used during development
+            cors_origins = [
+                'https://sound-aware.vercel.app',
+                'http://localhost:19006',
+                'http://127.0.0.1:19006',
+                'http://localhost:19000',
+                'http://localhost:3000',
+                'http://127.0.0.1:5000',
+                'http://localhost:8081',
+                'http://localhost:8080',
+            ]
+    print(f"[startup] CORS origins: {cors_origins} (DEV_ALLOW_ALL_ORIGINS={dev_allow_all})")
+    if cors_origins == '*':
+        CORS(app)
+    else:
+        CORS(app, origins=cors_origins)
 
     project_root = os.path.dirname(os.path.abspath(__file__))
 
@@ -88,6 +111,14 @@ def create_app():
             key = request.headers.get("x-api-key")
             if key != API_KEY:
                 return jsonify({"error": "missing or invalid API key"}), 401
+        # debug info: log incoming request context
+        try:
+            print(f"[predict] method={request.method} remote_addr={request.remote_addr} origin={request.headers.get('Origin')} headers_x_api_key={request.headers.get('x-api-key')}")
+        except Exception:
+            pass
+
+        # allow optional debug mode via query param or header
+        debug_mode = str(request.args.get('debug', '')).lower() in ('1', 'true') or request.headers.get('X-Debug') == '1'
 
         if "file" not in request.files:
             return jsonify({"error": "no file provided"}), 400
@@ -102,6 +133,11 @@ def create_app():
             tmp = tmpf.name
             tmpf.close()
             f.save(tmp)
+
+            try:
+                print(f"[predict] upload filename={f.filename}")
+            except Exception:
+                pass
 
             # sanity-check saved file
             try:
@@ -173,6 +209,18 @@ def create_app():
                 else:
                     raise RuntimeError(f"audio_to_mel_image failed and conversion not available: {e}")
 
+            # collect basic stats for debugging
+            try:
+                input_stats = {
+                    'min': float(np.min(input_image)),
+                    'max': float(np.max(input_image)),
+                    'mean': float(np.mean(input_image)),
+                    'std': float(np.std(input_image)),
+                    'shape': list(input_image.shape)
+                }
+            except Exception:
+                input_stats = None
+
             input_q, input_meta = quantize_input(input_image, input_details[0])
 
             interpreter.set_tensor(input_details[0]['index'], input_q)
@@ -203,7 +251,7 @@ def create_app():
             pred_idx = int(np.argmax(probs))
             pred_label = class_names[pred_idx] if 0 <= pred_idx < len(class_names) else str(pred_idx)
 
-            return jsonify({
+            result = {
                 "pred_idx": pred_idx,
                 "pred_label": pred_label,
                 "scores": probs_list,
@@ -211,7 +259,27 @@ def create_app():
                 "top_k": top_k,
                 "prob_mode": prob_mode,
                 "header_preview": header_preview,
-            })
+            }
+            # when debug mode requested, add internals so we can inspect why 'unknown' appears
+            if debug_mode:
+                try:
+                    result.update({
+                        'input_stats': input_stats,
+                        'input_meta': input_meta,
+                        'output_meta': out_meta,
+                        'raw_output': raw_out.tolist(),
+                        'logits': output_float[0].tolist(),
+                        'class_names_len': len(class_names),
+                    })
+                    print(f"[predict] debug result included (input shape={input_stats.get('shape') if input_stats else 'n/a'})")
+                except Exception:
+                    pass
+            try:
+                print(f"[predict] result pred_label={pred_label} pred_idx={pred_idx} top1_score={probs_list[pred_idx] if 0<=pred_idx<len(probs_list) else None}")
+            except Exception:
+                pass
+
+            return jsonify(result)
 
         except Exception as e:
             tb = traceback.format_exc()
@@ -230,6 +298,11 @@ def create_app():
         if "file" not in request.files:
             return jsonify({"error": "no file provided"}), 400
 
+        try:
+            print(f"[predict_debug] method={request.method} remote_addr={request.remote_addr} origin={request.headers.get('Origin')}")
+        except Exception:
+            pass
+
         f = request.files["file"]
         tmp = None
         try:
@@ -237,6 +310,11 @@ def create_app():
             tmp = tmpf.name
             tmpf.close()
             f.save(tmp)
+
+            try:
+                print(f"[predict_debug] upload filename={f.filename}")
+            except Exception:
+                pass
 
             input_image = audio_to_mel_image(tmp)
             stats = {
