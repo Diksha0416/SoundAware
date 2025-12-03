@@ -181,12 +181,20 @@ export default function RecordScreen() {
           if ((Platform as any).OS === 'web') return;
           const KeepAwake: any = await import('expo-keep-awake');
           // Try common API names across versions
-          if (KeepAwake.activateKeepAwake) {
-            await KeepAwake.activateKeepAwake();
-          } else if (KeepAwake.preventAutoLockAsync) {
-            await KeepAwake.preventAutoLockAsync();
-          } else if (KeepAwake.activateAsync) {
-            await KeepAwake.activateAsync();
+          const candidates = ['activateKeepAwakeAsync', 'activateKeepAwake', 'preventAutoLockAsync', 'activateAsync'];
+          for (const name of candidates) {
+            const fn = KeepAwake[name];
+            if (typeof fn === 'function') {
+              try {
+                // call and await if returns a promise
+                const res = fn();
+                if (res && typeof res.then === 'function') await res;
+                return;
+              } catch (err) {
+                console.warn('[keep-awake] method', name, 'failed', err);
+                // try next
+              }
+            }
           }
         } catch (e) {
           console.warn('keep-awake activation failed (ignored):', e);
@@ -246,12 +254,18 @@ export default function RecordScreen() {
       try {
         if ((Platform as any).OS === 'web') return;
         const KeepAwake: any = await import('expo-keep-awake');
-        if (KeepAwake.deactivateKeepAwake) {
-          await KeepAwake.deactivateKeepAwake();
-        } else if (KeepAwake.allowScreenSleepAsync) {
-          await KeepAwake.allowScreenSleepAsync();
-        } else if (KeepAwake.deactivateAsync) {
-          await KeepAwake.deactivateAsync();
+        const candidates = ['deactivateKeepAwakeAsync', 'deactivateKeepAwake', 'allowScreenSleepAsync', 'deactivateAsync'];
+        for (const name of candidates) {
+          const fn = KeepAwake[name];
+          if (typeof fn === 'function') {
+            try {
+              const res = fn();
+              if (res && typeof res.then === 'function') await res;
+              return;
+            } catch (err) {
+              console.warn('[keep-awake] method', name, 'failed', err);
+            }
+          }
         }
       } catch (e) {
         console.warn('keep-awake deactivation failed (ignored):', e);

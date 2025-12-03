@@ -37,6 +37,10 @@ Windows tips:
    ```bash
    npm install
    ```
+2. Install all Python Libraries in the Backend
+   ```bash
+   pip install -r requirements.txt
+   ```
 2. If you’re behind a corporate proxy/VPN, ensure your `npm`/`git` proxy settings are correct.
 
 
