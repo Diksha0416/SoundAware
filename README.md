@@ -18,6 +18,18 @@ Important config files:
 - `package.json` – scripts and dependencies
 - `app.json` – Expo config (name, icon, plugins, web bundler, etc.)
 
+## Model 
+- The dataset used in this project was sourced from [Zenodo](https://doi.org/10.5281/zenodo.10378145)
+- The classification task includes 12 classes, and each class has two categories: speech and no speech.
+- We experimented with multiple deep learning architectures, including:
+  - CNN
+  - CRNN
+  - BC_ResNet-40
+- Among all models, BC_ResNet-40 achieved the best accuracy of 71.40%.
+- Also applied INT8 quantization to the model to make it compatible with mobile devices.
+
+<img width="1919" height="868" alt="accuracy per class" src="assets/images/acc.jpeg">
+
 
 ## Prerequisites
 - Node.js LTS (>= 18 recommended)
