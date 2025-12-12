@@ -25,8 +25,8 @@ Important config files:
   - CNN
   - CRNN
   - BC_ResNet-40
-- Among all models, BC_ResNet-40 achieved the best accuracy of 71.40%.
-- Also applied INT8 quantization to the model to make it compatible with mobile devices.
+- Among all models, `BC_ResNet-40` achieved the best accuracy of 71.40%.
+- Also applied `INT8` quantization to the model to make it compatible with mobile devices.
 
 <img width="1919" height="868" alt="accuracy per class" src="assets/images/acc.jpeg">
 
