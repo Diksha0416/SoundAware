@@ -44,7 +44,6 @@ Important config files:
 - Node.js LTS (>= 18 recommended)
 - npm (bundled with Node) or yarn/pnpm (optional)
 - Expo CLI (you can use `npx` without a global install)
-- Python Libraries: TensorFlow, Seaborn, Scikit-learn, Librosa, NumPy, Matplotlib
 - Android or iOS device:
   - Android: Expo Go app on a physical device (from Play Store) or an Android Emulator (Android Studio).
   - iOS: Expo Go on a physical device (App Store) or Xcode Simulator (macOS only).
